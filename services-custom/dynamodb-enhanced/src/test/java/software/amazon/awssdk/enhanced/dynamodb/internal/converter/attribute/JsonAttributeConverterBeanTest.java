@@ -24,29 +24,7 @@ import static software.amazon.awssdk.enhanced.dynamodb.mapper.StaticAttributeTag
 
 public class JsonAttributeConverterBeanTest extends LocalDynamoDbSyncTestBase {
 
-//    Repository repository = new DynamoDbRepository(getDynamoDbClient(), getConcreteTableName(TABLE_NAME));
-
     String tableName = "JsonConverterTestTable";
-
-    //    SuperTypeToken<Metadata> superTypeToken = new SuperTypeToken<>() {
-//    };
-//    JsonAttributeConverter<Metadata> converter = JsonAttributeConverter.create(new SuperTypeToken<Metadata>() {
-//    }, new ObjectMapper());
-//    TableSchema<PhotoItem> schema = TableSchema.builder(PhotoItem.class)
-//            .newItemSupplier(PhotoItem::new)
-//            .addAttribute(String.class, a -> {
-//                a.name("id");
-//                a.getter(PhotoItem::getId);
-//                a.setter(PhotoItem::setId);
-//                a.tags(primaryPartitionKey());
-//            })
-//            .addAttribute(Metadata.class, a -> {
-//                a.name("metadata");
-//                a.getter(PhotoItem::getMetadata);
-//                a.setter(PhotoItem::setMetadata);
-//                a.attributeConverter(converter);
-//            })
-//            .build();
 
     DynamoDbTable<PhotoItem> photoTable = DynamoDbEnhancedClient.builder()
             .dynamoDbClient(getDynamoDbClient())
@@ -77,7 +55,6 @@ public class JsonAttributeConverterBeanTest extends LocalDynamoDbSyncTestBase {
 
         PhotoItem retrievedPhoto = photoTable.getItem(Key.builder().partitionValue("123").build());
         assertThat(retrievedPhoto).isEqualTo(photo);
-//        getDynamoDbClient().putItem(r -> r.tableName(tableName).)
     }
 
     @DynamoDbBean

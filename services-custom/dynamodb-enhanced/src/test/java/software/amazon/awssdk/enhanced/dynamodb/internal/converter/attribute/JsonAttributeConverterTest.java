@@ -23,12 +23,8 @@ import static software.amazon.awssdk.enhanced.dynamodb.mapper.StaticAttributeTag
 
 public class JsonAttributeConverterTest extends LocalDynamoDbSyncTestBase {
 
-//    Repository repository = new DynamoDbRepository(getDynamoDbClient(), getConcreteTableName(TABLE_NAME));
-
     String tableName = "JsonConverterTestTable";
 
-    //    SuperTypeToken<Metadata> superTypeToken = new SuperTypeToken<>() {
-//    };
     JsonAttributeConverter<List<Metadata>> converter = JsonAttributeConverter.create(EnhancedType.listOf(Metadata.class), new ObjectMapper());
     TableSchema<PhotoItem> schema = TableSchema.builder(PhotoItem.class)
             .newItemSupplier(PhotoItem::new)
@@ -75,7 +71,6 @@ public class JsonAttributeConverterTest extends LocalDynamoDbSyncTestBase {
 
         PhotoItem retrievedPhoto = photoTable.getItem(Key.builder().partitionValue("123").build());
         assertThat(retrievedPhoto).isEqualTo(photo);
-//        getDynamoDbClient().putItem(r -> r.tableName(tableName).)
     }
 
     public static class PhotoItem {
