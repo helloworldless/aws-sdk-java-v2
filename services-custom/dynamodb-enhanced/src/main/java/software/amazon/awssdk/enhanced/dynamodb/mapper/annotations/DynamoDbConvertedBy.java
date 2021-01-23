@@ -34,4 +34,6 @@ import software.amazon.awssdk.enhanced.dynamodb.AttributeConverterProvider;
 @SdkPublicApi
 public @interface DynamoDbConvertedBy {
     Class<? extends AttributeConverter> value();
+//    boolean isGeneric() default false;
+//    Class<?> generic() default Object.class;
 }

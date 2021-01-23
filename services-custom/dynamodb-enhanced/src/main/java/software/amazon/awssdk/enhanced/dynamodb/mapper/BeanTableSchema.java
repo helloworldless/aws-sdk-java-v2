@@ -15,6 +15,27 @@
 
 package software.amazon.awssdk.enhanced.dynamodb.mapper;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import software.amazon.awssdk.annotations.SdkPublicApi;
+import software.amazon.awssdk.enhanced.dynamodb.AttributeConverter;
+import software.amazon.awssdk.enhanced.dynamodb.AttributeConverterProvider;
+import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedClient;
+import software.amazon.awssdk.enhanced.dynamodb.EnhancedType;
+import software.amazon.awssdk.enhanced.dynamodb.TableSchema;
+import software.amazon.awssdk.enhanced.dynamodb.internal.converter.attribute.JsonAttributeConverter;
+import software.amazon.awssdk.enhanced.dynamodb.internal.mapper.BeanAttributeGetter;
+import software.amazon.awssdk.enhanced.dynamodb.internal.mapper.BeanAttributeSetter;
+import software.amazon.awssdk.enhanced.dynamodb.internal.mapper.MetaTableSchema;
+import software.amazon.awssdk.enhanced.dynamodb.internal.mapper.MetaTableSchemaCache;
+import software.amazon.awssdk.enhanced.dynamodb.internal.mapper.ObjectConstructor;
+import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.BeanTableSchemaAttributeTag;
+import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbAttribute;
+import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean;
+import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbConvertedBy;
+import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbFlatten;
+import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbIgnore;
+import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbImmutable;
+
 import java.beans.BeanInfo;
 import java.beans.IntrospectionException;
 import java.beans.Introspector;
@@ -35,24 +56,6 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-import software.amazon.awssdk.annotations.SdkPublicApi;
-import software.amazon.awssdk.enhanced.dynamodb.AttributeConverter;
-import software.amazon.awssdk.enhanced.dynamodb.AttributeConverterProvider;
-import software.amazon.awssdk.enhanced.dynamodb.DynamoDbEnhancedClient;
-import software.amazon.awssdk.enhanced.dynamodb.EnhancedType;
-import software.amazon.awssdk.enhanced.dynamodb.TableSchema;
-import software.amazon.awssdk.enhanced.dynamodb.internal.mapper.BeanAttributeGetter;
-import software.amazon.awssdk.enhanced.dynamodb.internal.mapper.BeanAttributeSetter;
-import software.amazon.awssdk.enhanced.dynamodb.internal.mapper.MetaTableSchema;
-import software.amazon.awssdk.enhanced.dynamodb.internal.mapper.MetaTableSchemaCache;
-import software.amazon.awssdk.enhanced.dynamodb.internal.mapper.ObjectConstructor;
-import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.BeanTableSchemaAttributeTag;
-import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbAttribute;
-import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbBean;
-import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbConvertedBy;
-import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbFlatten;
-import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbIgnore;
-import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbImmutable;
 
 /**
  * Implementation of {@link TableSchema} that builds a table schema based on properties and annotations of a bean
@@ -87,7 +90,7 @@ import software.amazon.awssdk.enhanced.dynamodb.mapper.annotations.DynamoDbImmut
  * }
  *
  * </pre>
- *
+ * <p>
  * Creating an {@link BeanTableSchema} is a moderately expensive operation, and should be performed sparingly. This is
  * usually done once at application startup.
  *
@@ -104,12 +107,12 @@ public final class BeanTableSchema<T> extends WrappedTableSchema<T, StaticTableS
     /**
      * Scans a bean class and builds a {@link BeanTableSchema} from it that can be used with the
      * {@link DynamoDbEnhancedClient}.
-     *
+     * <p>
      * Creating an {@link BeanTableSchema} is a moderately expensive operation, and should be performed sparingly. This is
      * usually done once at application startup.
      *
      * @param beanClass The bean class to build the table schema from.
-     * @param <T> The bean class type.
+     * @param <T>       The bean class type.
      * @return An initialized {@link BeanTableSchema}
      */
     public static <T> BeanTableSchema<T> create(Class<T> beanClass) {
@@ -121,7 +124,7 @@ public final class BeanTableSchema<T> extends WrappedTableSchema<T, StaticTableS
         MetaTableSchema<T> metaTableSchema = metaTableSchemaCache.getOrCreate(beanClass);
 
         BeanTableSchema<T> newTableSchema =
-            new BeanTableSchema<>(createStaticTableSchema(beanClass, metaTableSchemaCache));
+                new BeanTableSchema<>(createStaticTableSchema(beanClass, metaTableSchemaCache));
         metaTableSchema.initialize(newTableSchema);
         return newTableSchema;
     }
@@ -167,33 +170,33 @@ public final class BeanTableSchema<T> extends WrappedTableSchema<T, StaticTableS
         Supplier<T> newObjectSupplier = newObjectSupplierForClass(beanClass);
 
         StaticTableSchema.Builder<T> builder = StaticTableSchema.builder(beanClass)
-                                                                .newItemSupplier(newObjectSupplier);
+                .newItemSupplier(newObjectSupplier);
 
         builder.attributeConverterProviders(createConverterProvidersFromAnnotation(dynamoDbBean));
 
         List<StaticAttribute<T, ?>> attributes = new ArrayList<>();
 
         Arrays.stream(beanInfo.getPropertyDescriptors())
-              .filter(BeanTableSchema::isMappableProperty)
-              .forEach(propertyDescriptor -> {
-                  DynamoDbFlatten dynamoDbFlatten = getPropertyAnnotation(propertyDescriptor, DynamoDbFlatten.class);
+                .filter(BeanTableSchema::isMappableProperty)
+                .forEach(propertyDescriptor -> {
+                    DynamoDbFlatten dynamoDbFlatten = getPropertyAnnotation(propertyDescriptor, DynamoDbFlatten.class);
 
-                  if (dynamoDbFlatten != null) {
-                      builder.flatten(TableSchema.fromClass(propertyDescriptor.getReadMethod().getReturnType()),
-                                      getterForProperty(propertyDescriptor, beanClass),
-                                      setterForProperty(propertyDescriptor, beanClass));
-                  } else {
-                      StaticAttribute.Builder<T, ?> attributeBuilder =
-                          staticAttributeBuilder(propertyDescriptor, beanClass, metaTableSchemaCache);
+                    if (dynamoDbFlatten != null) {
+                        builder.flatten(TableSchema.fromClass(propertyDescriptor.getReadMethod().getReturnType()),
+                                getterForProperty(propertyDescriptor, beanClass),
+                                setterForProperty(propertyDescriptor, beanClass));
+                    } else {
+                        StaticAttribute.Builder<T, ?> attributeBuilder =
+                                staticAttributeBuilder(propertyDescriptor, beanClass, metaTableSchemaCache);
 
-                      Optional<AttributeConverter> attributeConverter =
-                              createAttributeConverterFromAnnotation(propertyDescriptor);
-                      attributeConverter.ifPresent(attributeBuilder::attributeConverter);
+                        Optional<AttributeConverter> attributeConverter =
+                                createAttributeConverterFromAnnotation(propertyDescriptor);
+                        attributeConverter.ifPresent(attributeBuilder::attributeConverter);
 
-                      addTagsToAttribute(attributeBuilder, propertyDescriptor);
-                      attributes.add(attributeBuilder.build());
-                  }
-              });
+                        addTagsToAttribute(attributeBuilder, propertyDescriptor);
+                        attributes.add(attributeBuilder.build());
+                    }
+                });
 
         builder.attributes(attributes);
 
@@ -215,9 +218,9 @@ public final class BeanTableSchema<T> extends WrappedTableSchema<T, StaticTableS
         Type propertyType = propertyDescriptor.getReadMethod().getGenericReturnType();
         EnhancedType<?> propertyTypeToken = convertTypeToEnhancedType(propertyType, metaTableSchemaCache);
         return StaticAttribute.builder(beanClass, propertyTypeToken)
-                              .name(attributeNameForProperty(propertyDescriptor))
-                              .getter(getterForProperty(propertyDescriptor, beanClass))
-                              .setter(setterForProperty(propertyDescriptor, beanClass));
+                .name(attributeNameForProperty(propertyDescriptor))
+                .getter(getterForProperty(propertyDescriptor, beanClass))
+                .setter(setterForProperty(propertyDescriptor, beanClass));
     }
 
     /**
@@ -237,13 +240,13 @@ public final class BeanTableSchema<T> extends WrappedTableSchema<T, StaticTableS
 
             if (List.class.equals(rawType)) {
                 return EnhancedType.listOf(convertTypeToEnhancedType(parameterizedType.getActualTypeArguments()[0],
-                                                                     metaTableSchemaCache));
+                        metaTableSchemaCache));
             }
 
             if (Map.class.equals(rawType)) {
                 return EnhancedType.mapOf(EnhancedType.of(parameterizedType.getActualTypeArguments()[0]),
-                                          convertTypeToEnhancedType(parameterizedType.getActualTypeArguments()[1],
-                                                                    metaTableSchemaCache));
+                        convertTypeToEnhancedType(parameterizedType.getActualTypeArguments()[1],
+                                metaTableSchemaCache));
             }
 
             if (rawType instanceof Class) {
@@ -256,12 +259,12 @@ public final class BeanTableSchema<T> extends WrappedTableSchema<T, StaticTableS
         if (clazz != null) {
             if (clazz.getAnnotation(DynamoDbImmutable.class) != null) {
                 return EnhancedType.documentOf(
-                    (Class<Object>) clazz,
-                    (TableSchema<Object>) ImmutableTableSchema.recursiveCreate(clazz, metaTableSchemaCache));
+                        (Class<Object>) clazz,
+                        (TableSchema<Object>) ImmutableTableSchema.recursiveCreate(clazz, metaTableSchemaCache));
             } else if (clazz.getAnnotation(DynamoDbBean.class) != null) {
                 return EnhancedType.documentOf(
-                    (Class<Object>) clazz,
-                    (TableSchema<Object>) BeanTableSchema.recursiveCreate(clazz, metaTableSchemaCache));
+                        (Class<Object>) clazz,
+                        (TableSchema<Object>) BeanTableSchema.recursiveCreate(clazz, metaTableSchemaCache));
             }
         }
 
@@ -273,8 +276,20 @@ public final class BeanTableSchema<T> extends WrappedTableSchema<T, StaticTableS
         DynamoDbConvertedBy attributeConverterBean =
                 getPropertyAnnotation(propertyDescriptor, DynamoDbConvertedBy.class);
         Optional<Class<?>> optionalClass = Optional.ofNullable(attributeConverterBean)
-                                                   .map(DynamoDbConvertedBy::value);
-        return optionalClass.map(clazz -> (AttributeConverter) newObjectSupplierForClass(clazz).get());
+                .map(DynamoDbConvertedBy::value);
+
+        return optionalClass.map(clazz -> {
+
+//            Optional<Class<?>> optionalgeneric = Optional.ofNullable(attributeConverterBean)
+//                    .map(DynamoDbConvertedBy::generic);
+
+//            Class<?> generic = attributeConverterBean.generic();
+//            Class<?> propertyType = propertyDescriptor.getPropertyType();
+            EnhancedType<List<Object>> hardCodedForNow = EnhancedType.listOf(Object.class);
+            return clazz.equals(JsonAttributeConverter.class)
+                    ? new JsonAttributeConverter<>(hardCodedForNow, new ObjectMapper())
+                    : (AttributeConverter) newObjectSupplierForClass(clazz).get();
+        });
     }
 
     /**
@@ -288,7 +303,7 @@ public final class BeanTableSchema<T> extends WrappedTableSchema<T, StaticTableS
 
         propertyAnnotations(propertyDescriptor).forEach(annotation -> {
             BeanTableSchemaAttributeTag beanTableSchemaAttributeTag =
-                annotation.annotationType().getAnnotation(BeanTableSchemaAttributeTag.class);
+                    annotation.annotationType().getAnnotation(BeanTableSchemaAttributeTag.class);
 
             if (beanTableSchemaAttributeTag != null) {
                 Class<?> tagClass = beanTableSchemaAttributeTag.value();
@@ -296,19 +311,19 @@ public final class BeanTableSchema<T> extends WrappedTableSchema<T, StaticTableS
                 Method tagMethod;
                 try {
                     tagMethod = tagClass.getDeclaredMethod(ATTRIBUTE_TAG_STATIC_SUPPLIER_NAME,
-                                                           annotation.annotationType());
+                            annotation.annotationType());
                 } catch (NoSuchMethodException e) {
                     throw new RuntimeException(
-                        String.format("Could not find a static method named '%s' on class '%s' that returns " +
-                                          "an AttributeTag for annotation '%s'", ATTRIBUTE_TAG_STATIC_SUPPLIER_NAME,
-                                      tagClass, annotation.annotationType()), e);
+                            String.format("Could not find a static method named '%s' on class '%s' that returns " +
+                                            "an AttributeTag for annotation '%s'", ATTRIBUTE_TAG_STATIC_SUPPLIER_NAME,
+                                    tagClass, annotation.annotationType()), e);
                 }
 
                 if (!Modifier.isStatic(tagMethod.getModifiers())) {
                     throw new RuntimeException(
-                        String.format("Could not find a static method named '%s' on class '%s' that returns " +
-                                          "an AttributeTag for annotation '%s'", ATTRIBUTE_TAG_STATIC_SUPPLIER_NAME,
-                                      tagClass, annotation.annotationType()));
+                            String.format("Could not find a static method named '%s' on class '%s' that returns " +
+                                            "an AttributeTag for annotation '%s'", ATTRIBUTE_TAG_STATIC_SUPPLIER_NAME,
+                                    tagClass, annotation.annotationType()));
                 }
 
                 StaticAttributeTag staticAttributeTag;
@@ -316,8 +331,8 @@ public final class BeanTableSchema<T> extends WrappedTableSchema<T, StaticTableS
                     staticAttributeTag = (StaticAttributeTag) tagMethod.invoke(null, annotation);
                 } catch (IllegalAccessException | InvocationTargetException e) {
                     throw new RuntimeException(
-                        String.format("Could not invoke method to create AttributeTag for annotation '%s' on class " +
-                                          "'%s'.", annotation.annotationType(), tagClass), e);
+                            String.format("Could not invoke method to create AttributeTag for annotation '%s' on class " +
+                                    "'%s'.", annotation.annotationType(), tagClass), e);
                 }
 
                 attributeBuilder.addTag(staticAttributeTag);
@@ -330,8 +345,8 @@ public final class BeanTableSchema<T> extends WrappedTableSchema<T, StaticTableS
             return ObjectConstructor.create(clazz, clazz.getConstructor());
         } catch (NoSuchMethodException e) {
             throw new IllegalArgumentException(
-                String.format("Class '%s' appears to have no default constructor thus cannot be used with the " +
-                                  "BeanTableSchema", clazz), e);
+                    String.format("Class '%s' appears to have no default constructor thus cannot be used with the " +
+                            "BeanTableSchema", clazz), e);
         }
     }
 
@@ -357,8 +372,8 @@ public final class BeanTableSchema<T> extends WrappedTableSchema<T, StaticTableS
 
     private static boolean isMappableProperty(PropertyDescriptor propertyDescriptor) {
         return propertyDescriptor.getReadMethod() != null
-            && propertyDescriptor.getWriteMethod() != null
-            && getPropertyAnnotation(propertyDescriptor, DynamoDbIgnore.class) == null;
+                && propertyDescriptor.getWriteMethod() != null
+                && getPropertyAnnotation(propertyDescriptor, DynamoDbIgnore.class) == null;
     }
 
     private static <R extends Annotation> R getPropertyAnnotation(PropertyDescriptor propertyDescriptor,
@@ -375,8 +390,8 @@ public final class BeanTableSchema<T> extends WrappedTableSchema<T, StaticTableS
 
     private static List<? extends Annotation> propertyAnnotations(PropertyDescriptor propertyDescriptor) {
         return Stream.concat(Arrays.stream(propertyDescriptor.getReadMethod().getAnnotations()),
-                             Arrays.stream(propertyDescriptor.getWriteMethod().getAnnotations()))
-                     .collect(Collectors.toList());
+                Arrays.stream(propertyDescriptor.getWriteMethod().getAnnotations()))
+                .collect(Collectors.toList());
     }
 }
 
