@@ -289,6 +289,8 @@ public final class BeanTableSchema<T> extends WrappedTableSchema<T, StaticTableS
             return clazz.equals(JsonAttributeConverter.class)
                     ? new JsonAttributeConverter<>(hardCodedForNow, new ObjectMapper())
                     : (AttributeConverter) newObjectSupplierForClass(clazz).get();
+
+//            return (AttributeConverter) newObjectSupplierForClass(clazz).get();
         });
     }
 
